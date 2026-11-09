@@ -1,5 +1,7 @@
 /** Verify packed runtime and strict declarations without borrowing ancestor dependencies. */
 import assert from 'node:assert/strict'
+import {imKitInput} from '../release-spec.mjs'
+import {createHash} from 'node:crypto'
 import {spawn} from 'node:child_process'
 import {mkdtemp,mkdir,readFile,writeFile,copyFile,realpath,statfs} from 'node:fs/promises'
 import {join,resolve,relative,isAbsolute,basename,dirname} from 'node:path'
@@ -15,7 +17,8 @@ const manifest=JSON.parse(await readFile(join(root,'package.json'),'utf8')),runs
 const resume=args.indexOf('--resume-run'),area=resume>=0?await realpath(args[resume+1]):await mkdtemp(join(runs,'run-')),owned=relative(runs,area);assert.ok(!owned.startsWith('..')&&!isAbsolute(owned),'Unowned consumer directory')
 const attempt=await mkdtemp(join(area,'attempt-')),archives=[]
 for(const source of[await realpath(argument('--im-kit-archive')),join(root,'artifacts',manifest.name+'-'+manifest.version+'.tgz')]){const path=join(attempt,basename(source));await copyFile(source,path);archives.push(path)}
-await writeFile(join(area,'package.json'),JSON.stringify({name:'isolated-job-delivery-consumer',private:true,type:'module',pnpm:{overrides:manifest.overrides}},null,2)+'\n')
+assert.equal(createHash('sha256').update(await readFile(archives[0])).digest('hex'),imKitInput.sha256,'Library input must match the fixed public release')
+await writeFile(join(area,'package.json'),JSON.stringify({name:'isolated-job-delivery-consumer',private:true,type:'module',pnpm:{overrides:{...manifest.overrides,[imKitInput.name]:'file:'+archives[0].replaceAll('\\','/')}}},null,2)+'\n')
 let store=join(root,'..','.pnpm-store')
 if(resume>=0){const modules=parseYaml(await readFile(join(area,'node_modules','.modules.yaml'),'utf8'));assert.equal(typeof modules.storeDir,'string');const retained=await realpath(modules.storeDir),allowed=[join(root,'.test-artifacts'),join(root,'..','.pnpm-store')];assert.ok(allowed.some(directory=>{const part=relative(directory,retained);return !part.startsWith('..')&&!isAbsolute(part)}),'Previous consumer store is not owned');assert.equal(basename(retained),'v10');store=dirname(retained)}
 await writeFile(join(area,'.npmrc'),'node-linker=hoisted\npackage-import-method=hardlink\nstore-dir='+store.replaceAll('\\','/')+'\ncache-dir='+join(root,'..','.pnpm-cache').replaceAll('\\','/')+'\n')
@@ -52,5 +55,5 @@ assert.equal(name,'job-delivery');assert.equal(Config({}).enabled,false);assert.
 console.log(JSON.stringify({passed:true,startedApplications:0,openedStores:0}))
 `)
 const runtime=JSON.parse((await run([join(attempt,'runtime.mjs')])).trim());assert.equal(runtime.passed,true)
-const result={passed:true,installedFiles,declarationInputs:inputs.length,ancestorDependenciesBorrowed:false,strictDeclarationErrors:0,runtime,realModelCalls:0,qqMessages:0,bilibiliWrites:0}
+const result={passed:true,installedFiles,declarationInputs:inputs.length,ancestorDependenciesBorrowed:false,strictDeclarationErrors:0,runtime,verifiedLocalDependencyInputs:true,realModelCalls:0,qqMessages:0,bilibiliWrites:0}
 await writeFile(join(attempt,'result.json'),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify({area,attempt,...result}))

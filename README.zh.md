@@ -42,6 +42,6 @@ schema 1 原生 domain 使用整库版本校验，坏记录和不支持的版本
 
 ## 验证与未完成项
 
-`npm test` 构建并测试合成的原生存储队列。`npm run test:native -- --im-kit-archive <library.tgz> --minimum-free-bytes 1610612736` 把候选装入独立 SDK profile，只强制中断该测试自有进程，再用第二个进程验证恢复。安装前检查显式指定的剩余空间预算，并在 PATH 固定声明的 pnpm。测试使用自制合成来源和本地传输，不发送 QQ 消息、不调用真实模型、不执行 B 站写入。可用 `node scripts/integration/test-web.mjs --im-kit-archive <library.tgz> --browser-cache <playwright-cache> --minimum-free-bytes 1610612736` 验证全新原生 Web profile 和自有无头浏览器。已执行结果保存在同级开发证据中，源码测试不代表模型语义质量评测。
+`npm test` 构建并测试合成的原生存储队列。`npm run test:native -- --im-kit-archive <library.tgz> --minimum-free-bytes 1610612736` 把候选装入独立 SDK profile，只强制中断该测试自有进程，再用第二个进程验证恢复。安装前检查显式指定的剩余空间预算，并在 PATH 固定声明的 pnpm。验收先核对固定公开输入的校验值，在不更改锁定 URL 的情况下预热 npm 内容缓存，隔离 pnpm profile 复用同一份已核对的库字节。公开下载失败时可走正常授权的 GitHub CLI，校验失败立即停止。测试使用自制合成来源和本地传输，不发送 QQ 消息、不调用真实模型、不执行 B 站写入。可用 `node scripts/integration/test-web.mjs --im-kit-archive <library.tgz> --browser-cache <playwright-cache> --minimum-free-bytes 1610612736` 验证全新原生 Web profile 和自有无头浏览器。已执行结果保存在同级开发证据中，源码测试不代表模型语义质量评测。
 
 发行验收覆盖本包与原生接口；与真实生图/搜索/语音插件的组合仍需各自的业务验收。面向模型的业务工具由消费插件提供，本包只开放可信 Host 与原生所有者操作。本包不提供完整定时配方、模型执行循环或进程沙箱。支持的应用均经 DSH profile 启动。
