@@ -1,0 +1,6 @@
+/** Browser-safe operator settings; defaults and invariant checks stay in the Host resolver. */
+export interface Settings{enabled:boolean;namespace:string;maxTasks:number;maxRecordBytes:number;maxPayloadBytes:number;maxReceiptBytes:number;maxRetainedBytes:number;maxOutputsPerTask:number;maxPartsPerOutput:number;maxTextChars:number;maxConcurrentExecutions:number;maxConcurrentDeliveries:number;maxExecutionsPerScope:number;maxDeliveriesPerScope:number;maxPendingMutations:number;executionTimeoutMs:number;deliveryTimeoutMs:number}
+/** Editable native representations, with one entry for every setting. */
+export const FIELDS={enabled:'boolean',namespace:'string',maxTasks:'number',maxRecordBytes:'number',maxPayloadBytes:'number',maxReceiptBytes:'number',maxRetainedBytes:'number',maxOutputsPerTask:'number',maxPartsPerOutput:'number',maxTextChars:'number',maxConcurrentExecutions:'number',maxConcurrentDeliveries:'number',maxExecutionsPerScope:'number',maxDeliveriesPerScope:'number',maxPendingMutations:'number',executionTimeoutMs:'number',deliveryTimeoutMs:'number'} as const satisfies Record<keyof Settings,string>
+/** Declared operator setting identity. */
+export type Field=keyof Settings

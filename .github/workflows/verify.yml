@@ -1,0 +1,65 @@
+name: Verify durable task delivery
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  package:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['22.19.0', '24.x']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/release-inputs.mjs
+      - run: npm run check
+      - run: npm pack --pack-destination artifacts
+      - if: matrix.node == '24.x'
+        run: npm run test:consumer -- --im-kit-archive .test-artifacts/release-inputs/dsh-im-kit-0.2.1.tgz --minimum-free-bytes 1610612736
+  native:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['22.19.0', '24.x']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/release-inputs.mjs
+      - run: npm pack --pack-destination artifacts
+      - run: npm run test:native -- --im-kit-archive .test-artifacts/release-inputs/dsh-im-kit-0.2.1.tgz --minimum-free-bytes 1610612736
+  web:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: .test-artifacts/browsers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24.x'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/release-inputs.mjs
+      - run: npx --no-install playwright install --with-deps chromium
+      - run: npm pack --pack-destination artifacts
+      - run: npm run test:web -- --im-kit-archive .test-artifacts/release-inputs/dsh-im-kit-0.2.1.tgz --minimum-free-bytes 1610612736 --browser-cache .test-artifacts/browsers

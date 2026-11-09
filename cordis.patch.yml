@@ -1,4 +1,6 @@
 - insert:
+    - id: job-delivery-control
+      name: dsh-job-delivery/control
     - id: job-delivery
       name: dsh-job-delivery
       config:

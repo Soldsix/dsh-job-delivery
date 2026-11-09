@@ -1,0 +1,20 @@
+.jobdelivery-page { display: flex; flex-direction: column; gap: 16px; max-width: 900px; min-width: 0; padding: 4px 0 16px; color: var(--dsw-alias-label-primary); font-size: 13px; }
+.jobdelivery-page p { margin: 0; line-height: 1.6; }
+.jobdelivery-page h3 { font-size: 13px; font-weight: 500; margin: 0; }
+.jobdelivery-help { color: var(--dsw-alias-label-secondary); }
+.jobdelivery-page form, .jobdelivery-queue, .jobdelivery-detail { display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; min-width: 0; }
+.jobdelivery-field { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr); gap: 8px 20px; align-items: center; }
+.jobdelivery-fields { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.jobdelivery-page input, .jobdelivery-page textarea, .jobdelivery-page select { width: 100%; min-width: 0; box-sizing: border-box; }
+.jobdelivery-page textarea, .jobdelivery-page select { font: inherit; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 8px; }
+.jobdelivery-page code { font-size: inherit; overflow-wrap: anywhere; }
+.jobdelivery-actions, .jobdelivery-summary, .jobdelivery-taskline { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.jobdelivery-taskline { justify-content: space-between; }
+.jobdelivery-tasklist { display: flex; flex-direction: column; gap: 12px; }
+.jobdelivery-task, .jobdelivery-output { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; }
+.jobdelivery-task button { align-self: flex-start; }
+.jobdelivery-check { display: flex; gap: 8px; align-items: flex-start; }
+.jobdelivery-check input { width: auto; margin: 3px 0; }
+.jobdelivery-spinner { align-self: center; width: 20px; height: 20px; margin: 48px; border: 2px solid var(--dsw-alias-border-l2); border-top-color: var(--dsw-alias-label-primary); border-radius: 50%; animation: jobdelivery-spin 0.8s linear infinite; }
+@keyframes jobdelivery-spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) { .jobdelivery-field { grid-template-columns: minmax(0, 1fr); gap: 8px; } .jobdelivery-page form, .jobdelivery-queue, .jobdelivery-detail { padding: 12px; } }

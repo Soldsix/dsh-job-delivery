@@ -4,7 +4,7 @@ import {writeFile,rename} from 'node:fs/promises'
 import {setTimeout as delay} from 'node:timers/promises'
 import {identifier} from 'dsh-im-kit'
 import {providerId,outputId} from 'dsh-job-delivery'
-export const inject=['jobDelivery','jobs','im','jobFixtureIm']
+export const inject=['jobDelivery','jobs','im','jobFixtureIm','jobDeliveryControl','typertGateway','remoteAccess']
 export const name='synthetic-job-probe'
 const gate=()=>{let resolve;const promise=new Promise(value=>{resolve=value});return{promise,resolve}}
 export async function apply(ctx,config){
@@ -13,7 +13,14 @@ export async function apply(ctx,config){
  ctx.effect(()=>ctx.jobDelivery.register({id:providerId('fixture'),maxConcurrent:2,async run(input,context){calls++;if(input.operationId.startsWith('parallel')){arrivals++;if(arrivals===2)both.resolve();await both.promise}await context.checkpoint(outputId('original'),[{type:'text',text:input.operationId==='interrupted'?'INTERRUPTED_ORIGINAL':input.payload.text}]);if(input.operationId==='interrupted'&&phase==='crash')await new Promise(resolve=>context.signal.addEventListener('abort',resolve,{once:true}))}}))
  const until=async check=>{const end=Date.now()+20000;while(!check()){assert.ok(Date.now()<end,'Native task observation timed out');await delay(10)}}
  try{
+  const peer={id:'task-owner-fixture',ctx,principal:{kind:'owner'},signal:new AbortController().signal,interactions:'none',async dispose(){}},invoke=(method,args={},caller=peer)=>ctx.typertGateway.invoke({namespace:'jobDeliveryControl',method,args,peer:caller,signal:caller.signal})
+  const methods=['describe','save','restart','scopes','list','inspect','cancel','reconcile','wake']
+  ctx.effect(()=>ctx.remoteAccess.registerPolicy('task-test-guest',{bindings:()=>[{resource:{kind:'global'},role:{name:'qa-task',resource:'global',actions:methods.map(method=>'jobDeliveryControl/'+method)}}]}))
+  const guest={...peer,id:'task-guest-fixture',principal:{kind:'task-test-guest'}}
+  for(const method of methods)await assert.rejects(invoke(method,method==='describe'||method==='scopes'?{}:{request:{}},guest),error=>error.code==='job-delivery/control'&&error.details?.reason==='forbidden')
+  assert.equal((await invoke('describe')).active,true);checks.push('all-nine-native-remotes-refuse-a-nonowner-even-with-global-role-permissions')
   if(phase==='crash'){
+
    const [a,b]=await Promise.all([ctx.jobDelivery.submit(source('parallel-a','room-a'),new AbortController().signal),ctx.jobDelivery.submit(source('parallel-b','room-b'),new AbortController().signal)]);await until(()=>ctx.jobDelivery.inspect(scope('room-a'),a.id).outputs[0]?.state==='accepted'&&ctx.jobDelivery.inspect(scope('room-b'),b.id).outputs[0]?.state==='accepted'&&ctx.jobDelivery.status().running===0&&ctx.jobDelivery.status().sending===0);assert.equal(arrivals,2);assert.equal(calls,2);checks.push('independent-scopes-use-the-real-native-job-registry-concurrently')
    assert.equal((await ctx.jobDelivery.submit(source('parallel-a'),new AbortController().signal)).replayed,true);assert.equal(calls,2);assert.equal(ctx.jobs.list().filter(job=>job.kind==='im-task').length,0);checks.push('durable-source-replay-does-not-start-another-native-job-and-collected-jobs-drain')
    const holders=[]
@@ -26,7 +33,9 @@ export async function apply(ctx,config){
    const result={passed:true,phase,checks,crashTask:current.id,producerCalls:calls,sendCalls:fixture.calls,execution:task.execution,output:task.outputs[0].state,nativeLiveJobs:live.length,realQqMessages:0,realModelCalls:0};await writeFile(resultPath+'.tmp',JSON.stringify(result,null,2)+'\n');await rename(resultPath+'.tmp',resultPath)
   }else{
    const current=await ctx.jobDelivery.submit(source('interrupted'),new AbortController().signal);assert.equal(current.replayed,true);const task=ctx.jobDelivery.inspect(scope('room-a'),current.id);assert.equal(task.execution,'uncertain');assert.equal(task.outputs[0].state,'uncertain');assert.equal(calls,0);assert.equal(fixture.calls,0);checks.push('second-sdk-process-restores-interrupted-generation-and-delivery-as-uncertain-without-replay')
-   await ctx.jobDelivery.resolveDelivery(scope('room-a'),current.id,'original',{state:'not-sent'});await until(()=>ctx.jobDelivery.inspect(scope('room-a'),current.id).outputs[0].state==='accepted');assert.equal(calls,0);assert.equal(fixture.calls,1);assert.deepEqual(fixture.messages[0].parts,[{type:'text',text:'INTERRUPTED_ORIGINAL'}]);assert.deepEqual(fixture.messages[0].scope,scope('room-a'));assert.equal(fixture.messages[0].operationId,'durable/'+current.id+'/original');await ctx.jobDelivery.resolveExecution(scope('room-a'),current.id,{state:'completed'});checks.push('confirmed-no-send-delivers-the-exact-retained-original-scope-and-operation-without-running-the-producer')
+   const detail=await invoke('inspect',{request:{scope:scope('room-a'),id:current.id}});assert.equal(detail.outputs[0].state,'uncertain');assert.ok(!JSON.stringify(detail).includes('INTERRUPTED_ORIGINAL'));assert.equal((await invoke('list',{request:{scope:scope('room-a'),offset:0}})).total,2)
+   await assert.rejects(invoke('reconcile',{request:{scope:scope('room-a'),id:current.id,revision:detail.revision,kind:'delivery',outputId:'original',state:'not-sent',confirmed:false}}),error=>error.details?.reason==='invalid')
+   await invoke('reconcile',{request:{scope:scope('room-a'),id:current.id,revision:detail.revision,kind:'delivery',outputId:'original',state:'not-sent',confirmed:true}});await until(()=>ctx.jobDelivery.inspect(scope('room-a'),current.id).outputs[0].state==='accepted');assert.equal(calls,0);assert.equal(fixture.calls,1);assert.deepEqual(fixture.messages[0].parts,[{type:'text',text:'INTERRUPTED_ORIGINAL'}]);assert.deepEqual(fixture.messages[0].scope,scope('room-a'));assert.equal(fixture.messages[0].operationId,'durable/'+current.id+'/original');await ctx.jobDelivery.resolveExecution(scope('room-a'),current.id,{state:'completed'});checks.push('confirmed-no-send-delivers-the-exact-retained-original-scope-and-operation-without-running-the-producer')
    const stopped=await ctx.jobDelivery.submit(source('muted-task','muted'),new AbortController().signal);await until(()=>ctx.jobDelivery.status().blockedScopes>0&&ctx.jobDelivery.status().running===0);await ctx.jobDelivery.cancel(scope('muted'),stopped.id);assert.equal(ctx.jobDelivery.inspect(scope('muted'),stopped.id).execution,'cancelled');assert.equal(calls,0);checks.push('native-muted-preflight-and-durable-stop-spend-no-producer-work')
    const result={passed:true,phase,checks,producerCalls:calls,sendCalls:fixture.calls,nativeLiveJobs:ctx.jobs.list().filter(job=>job.kind==='im-task').length,realQqMessages:0,realModelCalls:0};await writeFile(resultPath+'.tmp',JSON.stringify(result,null,2)+'\n');await rename(resultPath+'.tmp',resultPath)
   }
