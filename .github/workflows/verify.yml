@@ -1,5 +1,8 @@
 name: Verify durable task delivery
-on: [push, pull_request, workflow_dispatch]
+on:
+  - push
+  - pull_request
+  - workflow_dispatch
 permissions:
   contents: read
 jobs:
@@ -8,8 +11,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        node: ['22.19.0', '24.x']
+        os:
+          - ubuntu-latest
+          - windows-latest
+        node:
+          - 22.19.0
+          - 24.x
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -25,13 +32,27 @@ jobs:
       - run: npm pack --pack-destination artifacts
       - if: matrix.node == '24.x'
         run: npm run test:consumer -- --im-kit-archive .test-artifacts/release-inputs/dsh-im-kit-0.2.1.tgz --minimum-free-bytes 1610612736
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: installation-diagnostics-${{ github.job }}-${{ matrix.os || runner.os }}-${{ matrix.node || '24.x' }}
+          path: |
+            .test-artifacts/consumer/**/commands.json
+            .test-artifacts/native/**/installation.json
+            .test-artifacts/native-web/**/installation.json
+          if-no-files-found: ignore
+          retention-days: 7
   native:
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        node: ['22.19.0', '24.x']
+        os:
+          - ubuntu-latest
+          - windows-latest
+        node:
+          - 22.19.0
+          - 24.x
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -45,6 +66,16 @@ jobs:
       - run: node scripts/release-inputs.mjs
       - run: npm pack --pack-destination artifacts
       - run: npm run test:native -- --im-kit-archive .test-artifacts/release-inputs/dsh-im-kit-0.2.1.tgz --minimum-free-bytes 1610612736
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: installation-diagnostics-${{ github.job }}-${{ matrix.os || runner.os }}-${{ matrix.node || '24.x' }}
+          path: |
+            .test-artifacts/consumer/**/commands.json
+            .test-artifacts/native/**/installation.json
+            .test-artifacts/native-web/**/installation.json
+          if-no-files-found: ignore
+          retention-days: 7
   web:
     timeout-minutes: 20
     runs-on: ubuntu-latest
@@ -56,7 +87,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '24.x'
+          node-version: 24.x
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: node scripts/release-inputs.mjs
