@@ -39,6 +39,9 @@ export interface JobDeliveryService{
  /** @param scope - exact authorized conversation. @param id - task identity. @returns detached retained task, never another conversation's record. */inspect(scope:unknown,id:unknown):TaskRecord
  /** @param scope - exact authorized conversation. @returns bounded metadata in creation order. */list(scope:unknown):readonly TaskView[]
  /** @returns detached distinct retained scopes for trusted Host management. */scopes():readonly ConversationScope[]
+ /** @param scope - exact authorized conversation. @param listener - body-free invalidation after durability or worker cleanup. @returns idempotent subscription release; no initial notification. */subscribe(scope:unknown,listener:()=>void):()=>void
+ /** @param scope - exact authorized conversation. @param id - retained task. @param signal - cancels observation without cancelling the task. @returns terminal metadata after worker cleanup; failed and uncertain states remain explicit. */wait(scope:unknown,id:unknown,signal:AbortSignal):Promise<TaskView>
+ /** @param scope - exact authorized conversation. @param id - task identity. @returns joined active workers even during runtime shutdown, without starting queued work. */join(scope:unknown,id:unknown):Promise<void>
  /** @returns runtime counters without request bodies. */status():DeliveryStatus
  /** @param scope - optional exact conversation; omission wakes all transient holds. */wake(scope?:unknown):void
  /** @param scope - exact authorized conversation. @param id - task identity. @param expectedRevision - optional revision checked inside the stored transition. @returns durable stop request before in-flight work is aborted. */cancel(scope:unknown,id:unknown,expectedRevision?:string):Promise<void>

@@ -46,10 +46,17 @@ export function verifyText(text,label){
  assert.ok(!/\bsk-[a-z0-9]{20,}\b/i.test(text),'Credential-like literal in '+label);assert.ok(!/\bas unknown\b/.test(text),'Unknown assertion in '+label)
  assert.ok(/\r?\n$/u.test(text)&&!/(?:\r?\n){2}$/u.test(text),'Trailing newline in '+label)
 }
+/** @param english - owner upgrade steps. @param chinese - paired steps. @param pairing - explicit filenames. */
+export function verifyUpgradeGuide(english,chinese,pairing){
+ assert.deepEqual(pairing,{en:'guide.md',zh:'guide.zh.md'});assert.equal(english.split(/\r?\n/).length,chinese.split(/\r?\n/).length)
+ for(const text of[english,chinese]){assert.match(text,/^kind: upgrade-guide$/m);assert.match(text,/^description: ".+"$/m);assert.equal([...text.matchAll(/^# /gm)].length,1);verifyText(text,'upgrade guide')}
+ assert.deepEqual([...english.matchAll(/^## (.+)$/gm)].map(value=>value[1]),['Change','Migration']);assert.deepEqual([...chinese.matchAll(/^## (.+)$/gm)].map(value=>value[1]),['变更','迁移']);assert.ok(english.trim().split(/\s+/).length<=500)
+}
 async function sources(directory){const paths=[];for(const item of await readdir(directory,{withFileTypes:true})){const path=resolve(directory,item.name);if(item.isDirectory())paths.push(...await sources(path));else if(/\.tsx?$/.test(item.name))paths.push(path)}return paths}
 async function main(){
  const root=fileURLToPath(new URL('../',import.meta.url)),manifest=JSON.parse(await readFile(resolve(root,'package.json'),'utf8'));verifyManifest(manifest)
  verifyPair(await readFile(resolve(root,'README.md'),'utf8'),await readFile(resolve(root,'README.zh.md'),'utf8'))
+ const guide=resolve(root,'docs/upgrade-guide/v0.1.0-development/task-observation');verifyUpgradeGuide(await readFile(resolve(guide,'guide.md'),'utf8'),await readFile(resolve(guide,'guide.zh.md'),'utf8'),parse(await readFile(resolve(guide,'guide.i18n.yaml'),'utf8')))
  const patch=parse(await readFile(resolve(root,'cordis.patch.yml'),'utf8'));assert.deepEqual(patch,[{insert:[{id:'job-delivery-control',name:'dsh-job-delivery/control'},{id:'job-delivery',name:'dsh-job-delivery',config:{enabled:false}}]}])
  for(const path of await sources(resolve(root,'src'))){const text=await readFile(path,'utf8');verifyText(text,path);assert.ok(text.startsWith('/**'),'Module documentation missing')}
  assert.match(await readFile(resolve(root,'dist/client.js'),'utf8'),/Copyright \(c\) 2025 Colin McDonnell/)

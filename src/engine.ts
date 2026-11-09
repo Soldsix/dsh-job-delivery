@@ -24,13 +24,15 @@ export class DeliveryEngine implements JobDeliveryService{
  private readonly executions=new Map<TaskId,Active>()
  private readonly deliveries=new Map<string,Active>()
  private readonly blocked=new Map<string,BlockReason>()
+ private readonly observers=new Map<string,Set<()=>void>>()
+ private observerCount=0
  private executionCursor=''
  private deliveryCursor=''
  private scheduled=false
  private runtimeFault:string|null=null
  private maintenance=false
  private stopping:Promise<void>|undefined
- private constructor(private readonly config:Config,private readonly store:TaskStore,private readonly jobs:JobHost,private readonly im:()=>ImRuntime|undefined){store.faultListener(()=>this.lifetime.abort())}
+ private constructor(private readonly config:Config,private readonly store:TaskStore,private readonly jobs:JobHost,private readonly im:()=>ImRuntime|undefined){store.faultListener(()=>{this.lifetime.abort();this.observers.clear();this.observerCount=0});store.changeListener(record=>this.notify(scopeKey(record.request.scope)))}
  /** @param config - validated deployment settings. @param storage - native storage domain facility. @param jobs - native process-local job registry. @param im - current optional IM service. @returns recovered queue; interrupted work becomes uncertain before new work is accepted. */
  static async open(config:Config,storage:DomainFacility,jobs:JobHost,im:()=>ImRuntime|undefined):Promise<DeliveryEngine>{
   validateConfig(config);const store=await TaskStore.open(config,storage),engine=new DeliveryEngine(config,store,jobs,im)
@@ -69,6 +71,29 @@ export class DeliveryEngine implements JobDeliveryService{
  list(scope:unknown):readonly TaskView[]{const destination=parse(scopeSchema,scope);return this.store.entries().filter(value=>sameScope(destination,value.request.scope)).map(view).sort((a,b)=>a.createdAt-b.createdAt||a.id.localeCompare(b.id))}
  /** @returns exact scopes without source or output bodies. */
  scopes():readonly ConversationScope[]{const distinct=new Map<string,ConversationScope>();for(const record of this.store.entries())distinct.set(scopeKey(record.request.scope),record.request.scope);return structuredClone([...distinct.values()])}
+ /** @param scope - exact authorized conversation. @param listener - body-free invalidation after durability or worker cleanup; exceptions are contained. @returns idempotent subscription release; no initial event is implied. */
+ subscribe(scope:unknown,listener:()=>void):()=>void{
+  this.assertOpen();const key=scopeKey(parse(scopeSchema,scope));if(this.observerCount>=this.config.maxObservers)throw new TaskError('capacity')
+  const listeners=this.observers.get(key)??new Set<()=>void>(),callback=()=>listener();listeners.add(callback);this.observers.set(key,listeners);this.observerCount++;let released=false
+  return()=>{if(released)return;released=true;if(listeners.delete(callback)&&this.observerCount>0)this.observerCount--;if(!listeners.size&&this.observers.get(key)===listeners)this.observers.delete(key)}
+ }
+ private notify(scope:string):void{const listeners=this.observers.get(scope);if(!listeners)return;for(const listener of [...listeners])void Promise.resolve().then(()=>{if(!this.lifetime.signal.aborted&&this.observers.get(scope)===listeners&&listeners.has(listener))return listener()}).catch((_error:unknown)=>{/* Observer failures cannot break persistence or other subscriptions. */})}
+ private activeTask(id:TaskId):readonly Active[]{const execution=this.executions.get(id);return[...execution?[execution]:[],...[...this.deliveries].filter(([key])=>key.startsWith(id+'/')).map(([,active])=>active)]}
+ /** @param scope - exact authorized conversation. @param id - retained task identity. @param signal - cancellation of observation only, not computation. @returns terminal metadata after that task's workers settle; uncertain outcomes remain uncertain. */
+ wait(scope:unknown,id:unknown,signal:AbortSignal):Promise<TaskView>{
+  const destination=parse(scopeSchema,scope),task=parse(taskIdSchema,id)
+  return new Promise<TaskView>((resolve,reject)=>{
+   let finished=false,release:(()=>void)|undefined
+   const cleanup=()=>{release?.();signal.removeEventListener('abort',check);this.lifetime.signal.removeEventListener('abort',check)}
+   const check=()=>{if(finished)return;try{this.assertOpen();if(signal.aborted)throw new TaskError('cancelled');const value=this.scoped(destination,task);if(this.activeTask(task).length||value.execution==='queued'||value.execution==='running'||value.outputs.some(output=>output.state==='pending'||output.state==='sending'))return;finished=true;cleanup();resolve(view(value))}catch(error){finished=true;cleanup();reject(error)}}
+   try{if(signal.aborted)throw new TaskError('cancelled');release=this.subscribe(destination,check);signal.addEventListener('abort',check,{once:true});this.lifetime.signal.addEventListener('abort',check,{once:true});check()}catch(error){finished=true;cleanup();reject(error)}
+  })
+ }
+ /** @param scope - authorized conversation. @param id - task identity. @returns cleanup of the currently owned task workers, including during shutdown; no work starts or retries. */
+ async join(scope:unknown,id:unknown):Promise<void>{
+  const key=scopeKey(parse(scopeSchema,scope)),task=parse(taskIdSchema,id)
+  for(;;){const active=this.activeTask(task);if(active.some(value=>value.scope!==key))throw new TaskError('not-found');if(!active.length)return;await Promise.allSettled(active.map(value=>value.done))}
+ }
  /** @returns source-free counters. */
  status():DeliveryStatus{return{tasks:this.store.count(),running:this.executions.size,sending:this.deliveries.size,producers:this.producers.size,blockedScopes:this.blocked.size,stopping:this.lifetime.signal.aborted,fault:this.store.fault()??this.runtimeFault,imAvailable:Boolean(this.im()),maintenance:this.maintenance,pendingMutations:this.store.pendingCount()}}
  /** @param scope - optional exact conversation; omitted wakes every transient hold. */
@@ -85,12 +110,12 @@ export class DeliveryEngine implements JobDeliveryService{
    while(this.executions.size<this.config.maxConcurrentExecutions){
     const items=this.store.entries().filter(task=>task.execution==='queued'&&!task.cancelRequested&&!this.executions.has(task.id)&&!this.blocked.has(scopeKey(task.request.scope))).filter(task=>{const entry=this.producers.get(task.request.provider);return entry&&!entry.closing&&[...this.executions.values()].filter(value=>value.provider===task.request.provider).length<entry.producer.maxConcurrent&&[...this.executions.values()].filter(value=>value.scope===scopeKey(task.request.scope)).length<this.config.maxExecutionsPerScope}).map(task=>({task,scope:task.request.scope}))
     const selected=this.choose(items,this.executionCursor);if(!selected)break;const {task}=selected,entry=this.producers.get(task.request.provider);if(!entry)break;const controller=new AbortController(),scope=scopeKey(task.request.scope);this.executionCursor=scope
-    const done=Promise.resolve().then(()=>this.execute(task.id,entry,controller));this.executions.set(task.id,{controller,done,scope,provider:task.request.provider});void done.then(()=>{this.executions.delete(task.id);this.pump()},()=>{this.executions.delete(task.id);this.pump()})
+    const done=Promise.resolve().then(()=>this.execute(task.id,entry,controller));this.executions.set(task.id,{controller,done,scope,provider:task.request.provider});void done.then(()=>{this.executions.delete(task.id);this.notify(scope);this.pump()},()=>{this.executions.delete(task.id);this.notify(scope);this.pump()})
    }
    while(this.deliveries.size<this.config.maxConcurrentDeliveries){
     const items=this.store.entries().filter(task=>!task.cancelRequested&&!this.blocked.has(scopeKey(task.request.scope))).flatMap(task=>task.outputs.filter(output=>output.state==='pending'&&!this.deliveries.has(task.id+'/'+output.id)).map(output=>({task,output,scope:task.request.scope}))).filter(item=>[...this.deliveries.values()].filter(value=>value.scope===scopeKey(item.scope)).length<this.config.maxDeliveriesPerScope)
     const selected=this.choose(items,this.deliveryCursor);if(!selected)break;const {task,output}=selected,key=task.id+'/'+output.id,controller=new AbortController(),scope=scopeKey(task.request.scope);this.deliveryCursor=scope
-    const done=Promise.resolve().then(()=>this.deliver(task.id,output.id,controller));this.deliveries.set(key,{controller,done,scope,provider:task.request.provider});void done.then(()=>{this.deliveries.delete(key);this.pump()},()=>{this.deliveries.delete(key);this.pump()})
+    const done=Promise.resolve().then(()=>this.deliver(task.id,output.id,controller));this.deliveries.set(key,{controller,done,scope,provider:task.request.provider});void done.then(()=>{this.deliveries.delete(key);this.notify(scope);this.pump()},()=>{this.deliveries.delete(key);this.notify(scope);this.pump()})
    }
   }catch(error){this.runtimeFault='dispatch';this.lifetime.abort()}
  }
@@ -145,5 +170,5 @@ export class DeliveryEngine implements JobDeliveryService{
   await this.store.update(task.id,value=>{this.checkRevision(value,expectedRevision);if(value.cancelRequested||!['uncertain','failed'].includes(value.execution)||decision.state==='not-started'&&value.outputs.length>0)throw new TaskError('conflict');return{...value,execution:decision.state==='not-started'?'queued':decision.state,updatedAt:Date.now(),failure:null}});this.blocked.delete(scopeKey(task.request.scope));this.pump()
  }
  /** @returns actual producer and transport cleanup before the native domain is released. */
- close():Promise<void>{if(this.stopping)return this.stopping;this.lifetime.abort();for(const entry of this.producers.values())entry.closing=true;return this.stopping=(async()=>{await Promise.allSettled([...this.executions.values(),...this.deliveries.values()].map(item=>item.done));await this.store.close();this.producers.clear()})()}
+ close():Promise<void>{if(this.stopping)return this.stopping;this.lifetime.abort();this.observers.clear();this.observerCount=0;for(const entry of this.producers.values())entry.closing=true;return this.stopping=(async()=>{await Promise.allSettled([...this.executions.values(),...this.deliveries.values()].map(item=>item.done));await this.store.close();this.producers.clear()})()}
 }

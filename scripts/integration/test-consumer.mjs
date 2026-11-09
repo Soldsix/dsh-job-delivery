@@ -37,7 +37,8 @@ const producer:TaskProducer={id:providerId('consumer'),maxConcurrent:1,async run
 type Service=Context['jobDelivery']
 type Inspect=DeliveryControl['inspect']
 type NativeClient=typeof Client
-void enabled;void producer
+async function observe(service:Service,request:TaskRequest,id:string){const release=service.subscribe(request.scope,()=>{});try{const result=await service.wait(request.scope,id,new AbortController().signal);await service.join(request.scope,id);return result}finally{release()}}
+void enabled;void producer;void observe
 export type {Service,Inspect,NativeClient,TaskRequest}
 `)
 const program=ts.createProgram([consumer],{strict:true,noEmit:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,types:['node','react'],typeRoots:[join(area,'node_modules','@types')],lib:['lib.es2023.d.ts','lib.esnext.disposable.d.ts','lib.dom.d.ts'],skipLibCheck:false,allowImportingTsExtensions:true,jsx:ts.JsxEmit.ReactJSX}),diagnostics=ts.getPreEmitDiagnostics(program)

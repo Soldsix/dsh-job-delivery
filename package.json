@@ -1,6 +1,6 @@
 {
   "name": "dsh-job-delivery",
-  "version": "0.1.0-development",
+  "version": "0.2.0-development",
   "description": "Durable scoped producer tasks and receipt-aware IM delivery through native DSH jobs and storage.",
   "type": "module",
   "license": "MIT",

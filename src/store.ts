@@ -14,6 +14,7 @@ export class TaskStore{
  private retainedBytes=0
  private readonly recordBytes=new Map<TaskId,number>()
  private onFault:(()=>void)|undefined
+ private onChange:((record:TaskRecord)=>void)|undefined
  private readonly table:KvTable<TaskId,TaskRecord>
  private constructor(private readonly config:Config,private readonly domain:TaskDomain){this.table=domain.table('tasks')}
  /** @param config - validated capacities and domain name. @param facility - native storage provider. @returns opened authoritative records; invalid data is never skipped or repaired. */
@@ -23,6 +24,8 @@ export class TaskStore{
  }
  /** @param listener - runtime cancellation on storage failure. */
  faultListener(listener:()=>void):void{this.onFault=listener}
+ /** @param listener - internal notification after a durable table mutation. */
+ changeListener(listener:(record:TaskRecord)=>void):void{this.onChange=listener}
  /** @returns safe storage fault, if any. */
  fault():string|null{return this.failure}
  /** @returns the current count, or null when the native domain is quarantined. */
@@ -42,7 +45,7 @@ export class TaskStore{
   const bytes=reservedBytes(value,this.config),next=this.retainedBytes-(this.recordBytes.get(value.id)??0)+bytes
   if(bytes>this.config.maxRecordBytes||next>this.config.maxRetainedBytes)throw new TaskError('capacity')
   try{await this.table.put(value.id,value)}catch(error){throw this.poison()}
-  this.recordBytes.set(value.id,bytes);this.retainedBytes=next
+  this.recordBytes.set(value.id,bytes);this.retainedBytes=next;this.onChange?.(value)
  }
  /** @param value - complete new durable input. @returns existing identical operation, or persistence of this new record. */
  admit(value:TaskRecord):Promise<{record:TaskRecord;replayed:boolean}>{return this.serial(async()=>{const existing=this.get(value.id);if(existing){if(existing.digest!==value.digest)throw new TaskError('conflict');return{record:existing,replayed:true}}if(this.table.size>=this.config.maxTasks)throw new TaskError('capacity');await this.put(value);return{record:value,replayed:false}})}
