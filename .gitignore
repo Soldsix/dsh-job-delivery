@@ -1,0 +1,9 @@
+node_modules/
+dist/
+artifacts/
+.test-artifacts/
+.npm-cache/
+pnpm-lock.yaml
+*.tgz
+.env
+*.local.*

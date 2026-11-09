@@ -1,0 +1,53 @@
+{
+  "name": "dsh-job-delivery",
+  "version": "0.1.0-development",
+  "description": "Durable scoped producer tasks and receipt-aware IM delivery through native DSH jobs and storage.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": "^22.19.0 || >=24.0.0", "dsh": "0.2.2-rc.1" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": ["dist/**/*.js", "dist/**/*.d.ts", "cordis.patch.yml", "README.md", "README.zh.md", "LICENSE"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/schemastery": "~3.19.0",
+    "@deepseek-ai/dsh-brand": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-jobs": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1"
+  },
+  "dependencies": {
+    "dsh-im-kit": "https://github.com/Soldsix/dsh-im-kit/releases/download/v0.2.1/dsh-im-kit-0.2.1.tgz",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-storage-json": "0.2.2-rc.1",
+    "@types/node": "24.0.0",
+    "typescript": "5.9.3",
+    "pnpm": "10.33.2"
+  },
+  "overrides": {
+    "zod": "4.6.6",
+    "undici": "8.12.2",
+    "fflate": "0.8.3",
+    "@modelcontextprotocol/client": "2.3.0"
+  },
+  "pnpm": { "overrides": { "zod": "4.6.6", "undici": "8.12.2", "fflate": "0.8.3", "@modelcontextprotocol/client": "2.3.0" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.host.json",
+    "typecheck": "tsc -p tsconfig.host.json --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "check": "npm run typecheck && npm test",
+    "test:native": "node scripts/integration/test-native.mjs",
+    "prepack": "npm run build"
+  },
+  "repository": { "type": "git", "url": "git+https://github.com/Soldsix/dsh-job-delivery.git" }
+}
