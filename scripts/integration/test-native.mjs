@@ -22,7 +22,7 @@ async function run(argv,cwd){
  const timeout=AbortSignal.timeout(300000),child=spawn(process.execPath,argv,{cwd,env,windowsHide:true,signal:timeout,stdio:['ignore','pipe','pipe']});let stdout='',stderr='',failure
  child.stdout.on('data',data=>{stdout+=data});child.stderr.on('data',data=>{stderr+=data});child.once('error',error=>{failure=error});const done=new Promise(resolve=>child.once('close',(...values)=>resolve(values)))
  try{await writeFile(join(attempt,'setup-live.json'),JSON.stringify({pid:child.pid,startedAt:new Date().toISOString()})+'\n')}catch(error){child.kill('SIGKILL');await done;throw error}
- const [code,signal]=await done;commands.push({argv,code,signal,stdout,stderr});await writeFile(join(attempt,'installation.json'),JSON.stringify(commands,null,2)+'\n');if(failure)throw failure;assert.equal(code,0,stderr.slice(-1400));return stdout
+ const [code,signal]=await done;commands.push({argv,code,signal,stdout,stderr});await writeFile(join(attempt,'installation.json'),JSON.stringify(commands,null,2)+'\n');if(failure)throw failure;assert.equal(code,0,(stderr+"\n"+stdout).slice(-1400));return stdout
 }
 const reuse=args.includes('--installed-profile-only');assert.ok(!reuse||resume>=0,'Installed profile reuse requires an owned --resume-run')
 if(resume<0)await run([dsh,'--profile',profile,'--from-default-profile','sdk','--dump-config'],area)

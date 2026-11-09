@@ -12,7 +12,7 @@ kind: "package-bundle"
 
 ## 使用和授权
 
-目标为 DSH 0.2.2-rc.1 与 Node ^22.19 或 >=24。bundle 插入默认关闭的运行时与独立挂载的所有者控制组件，依赖原生作业注册表与存储 domain；存储路由须提供持久后端。IM 提供方可以稍后接入，执行器来自已安装的 Host 插件，由操作者选择。
+目标为 DSH 0.2.2-rc.1，其声明的 Host 运行环境为 Node >=24.9.0；核心库另测 Node 22.19，只代表实测兼容，不扩大 Host 支持范围。bundle 插入默认关闭的运行时与独立挂载的所有者控制组件，依赖原生作业注册表与存储 domain；存储路由须提供持久后端。IM 提供方可以稍后接入，执行器来自已安装的 Host 插件，由操作者选择。
 
 Host 服务为 `ctx.jobDelivery`，通过 `ctx.effect(() => ctx.jobDelivery.register(producer))` 注册执行器。执行器声明并发容量，每个完成的原产物先调用 `context.checkpoint(outputId, parts)`，再报告完成。提交经认证的 `scope`、`actorId`、来源 `operationId`、提供方 ID 与 JSON 参数，把选定模型、音色及用户偏好冻结在参数中。可用 subscribe(scope, listener) 订阅不含正文的变更，wait(scope, id, signal) 等待单个任务与原生工作清理完成，join(scope, id) 在退出时加入该任务的活跃工作。取消等待不会取消计算；消费方负责取消时，应先 cancel 再 join。完整来源持久后才允许执行；准入取消在持久化前检查，已经提交的准入仍返回其身份。
 

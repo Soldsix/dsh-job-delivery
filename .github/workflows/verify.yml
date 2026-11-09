@@ -63,3 +63,13 @@ jobs:
       - run: npx --no-install playwright install --with-deps chromium
       - run: npm pack --pack-destination artifacts
       - run: npm run test:web -- --im-kit-archive .test-artifacts/release-inputs/dsh-im-kit-0.2.1.tgz --minimum-free-bytes 1610612736 --browser-cache .test-artifacts/browsers
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: installation-diagnostics-${{ github.job }}-${{ matrix.os || runner.os }}-${{ matrix.node || '24.x' }}
+          path: |
+            .test-artifacts/consumer/**/commands.json
+            .test-artifacts/native/**/installation.json
+            .test-artifacts/native-web/**/installation.json
+          if-no-files-found: ignore
+          retention-days: 7
